@@ -1,0 +1,11 @@
+# Benchmarking Request Cache Plug
+
+## Setup
+
+```elixir
+Mix.install([:jason, :finch])
+
+{:ok, _} = Finch.start_link(name: BenchMarkFinch)
+```
+
+## Benchmarking no optimizations
