@@ -8,14 +8,11 @@ defmodule RequestCacheTest.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      # Start the Telemetry supervisor
       RequestCacheTestWeb.Telemetry,
-      # Start the PubSub system
       {Phoenix.PubSub, name: RequestCacheTest.PubSub},
-      # Start the Endpoint (http/https)
-      RequestCacheTestWeb.Endpoint
-      # Start a worker by calling: RequestCacheTest.Worker.start_link(arg)
-      # {RequestCacheTest.Worker, arg}
+      RequestCacheTestWeb.Endpoint,
+
+      RequestCache.ConCacheStore
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

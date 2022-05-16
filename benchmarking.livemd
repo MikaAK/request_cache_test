@@ -3,9 +3,44 @@
 ## Setup
 
 ```elixir
-Mix.install([:jason, :finch])
+Mix.install([:jason, :finch, :benchee, :benchee_html])
 
 {:ok, _} = Finch.start_link(name: BenchMarkFinch)
+
+get_url = fn path ->
+  :get
+  |> Finch.build(Path.join("http://localhost:4000", path))
+  |> Finch.request(BenchMarkFinch)
+end
 ```
 
-## Benchmarking no optimizations
+## Benchmarking
+
+```elixir
+inputs = %{
+  "100 Bytes" => "100-bytes",
+  "10 KB" => "10-kb",
+  "100 KB" => "100-kb",
+  "10 MB" => "10-mb",
+  "100 MB" => "100-mb",
+  "Large Item" => "large-item",
+  "Large Items (Multiple)" => "large-items"
+}
+
+inputs =
+  Map.new(inputs, fn {name, url} ->
+    {name, fn -> get_url.(url) end}
+  end)
+```
+
+```elixir
+Benchee.run(
+  inputs,
+  warmup: :timer.seconds(10),
+  time: :timer.seconds(30),
+  formatters: [
+    Benchee.Formatters.HTML,
+    Benchee.Formatters.Console
+  ]
+)
+```
