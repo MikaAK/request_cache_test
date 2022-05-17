@@ -36,8 +36,8 @@ inputs =
 ```elixir
 Benchee.run(
   inputs,
-  warmup: :timer.seconds(10),
-  time: :timer.seconds(30),
+  warmup: 10,
+  time: 30,
   formatters: [
     Benchee.Formatters.HTML,
     Benchee.Formatters.Console
