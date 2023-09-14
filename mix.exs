@@ -38,7 +38,7 @@ defmodule RequestCacheTest.MixProject do
       {:telemetry_poller, "~> 1.0"},
       {:jason, "~> 1.2"},
       {:plug_cowboy, "~> 2.5"},
-      {:request_cache_plug, "~> 0.1"},
+      {:request_cache_plug, path: "../request_cache_plug"},
       {:con_cache, "~> 1.0"}
     ]
   end

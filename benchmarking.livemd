@@ -1,46 +1,154 @@
 # Benchmarking Request Cache Plug
 
-## Setup
-
 ```elixir
-Mix.install([:jason, :finch, :benchee, :benchee_html])
+Mix.install([
+  :jason,
+  :finch,
+  {:benchee, github: "bencheeorg/benchee", ref: "main", override: true},
+  :benchee_html,
+  {:kino_vega_lite, "~> 0.1.7"}
+])
 
 {:ok, _} = Finch.start_link(name: BenchMarkFinch)
-
-get_url = fn path ->
-  :get
-  |> Finch.build(Path.join("http://localhost:4000", path))
-  |> Finch.request(BenchMarkFinch)
-end
 ```
+
+## Setup
 
 ## Benchmarking
 
 ```elixir
-inputs = %{
-  "100 Bytes" => "100-bytes",
-  "10 KB" => "10-kb",
-  "100 KB" => "100-kb",
-  "10 MB" => "10-mb",
-  "100 MB" => "100-mb",
-  "Large Item" => "large-item",
-  "Large Items (Multiple)" => "large-items"
-}
-
 inputs =
-  Map.new(inputs, fn {name, url} ->
-    {name, fn -> get_url.(url) end}
-  end)
+  Enum.reduce(
+    %{
+      "100 Bytes" => "100-bytes",
+      "10 KB" => "10-kb",
+      "100 KB" => "100-kb",
+      "10 MB" => "10-mb",
+      "100 MB" => "100-mb",
+      "Large Item" => "large-item",
+      "Large Items (Multiple)" => "large-items"
+    },
+    %{},
+    fn {name, url}, acc ->
+      acc
+      |> Map.put("Cached #{name}", url)
+      |> Map.put("Uncached #{name}", "uncached/#{url}")
+    end
+  )
+
+defmodule RequestModule do
+  for {_name, url} <- inputs do
+    fn_name = :"get_#{String.replace(url, "-", "_")}"
+
+    def unquote(fn_name)() do
+      :get
+      |> Finch.build(Path.join("http://localhost:4000", unquote(url)))
+      |> Finch.request(BenchMarkFinch)
+    end
+  end
+end
 ```
 
 ```elixir
-Benchee.run(
-  inputs,
-  warmup: 10,
-  time: 30,
-  formatters: [
-    Benchee.Formatters.HTML,
-    Benchee.Formatters.Console
-  ]
-)
+bench =
+  Benchee.run(
+    Enum.map(inputs, fn {name, url} ->
+      fn_name = :"get_#{String.replace(url, "-", "_")}"
+
+      {name, fn -> apply(RequestModule, fn_name, []) end}
+    end),
+    warmup: 10,
+    time: 30,
+    formatters: [
+      Benchee.Formatters.HTML,
+      Benchee.Formatters.Console
+    ]
+  )
+```
+
+```elixir
+minimum_data =
+  Enum.map(
+    bench.scenarios,
+    &%{name: &1.name, milliseconds: &1.run_time_data.statistics.minimum / 1_000_000}
+  )
+
+maximum_data =
+  Enum.map(
+    bench.scenarios,
+    &%{name: &1.name, milliseconds: &1.run_time_data.statistics.maximum / 1_000_000}
+  )
+
+median_data =
+  Enum.map(
+    bench.scenarios,
+    &%{name: &1.name, milliseconds: &1.run_time_data.statistics.median / 1_000_000}
+  )
+
+min_data = Enum.reject(minimum_data, &(&1.name =~ ~r/Uncached 100? MB|Uncached Large Item/))
+max_data = Enum.reject(maximum_data, &(&1.name =~ ~r/Uncached 100? MB|Uncached Large Item/))
+median_2_data = Enum.reject(median_data, &(&1.name =~ ~r/Uncached 100? MB|Uncached Large Item/))
+
+ips_data =
+  bench.scenarios
+  |> Enum.map(&%{name: &1.name, ips: &1.run_time_data.statistics.ips})
+  |> Enum.sort_by(& &1.ips, :desc)
+```
+
+<!-- livebook:{"attrs":{"chart_title":"Times","height":null,"layers":[{"active":true,"chart_type":"bar","color_field":null,"color_field_aggregate":null,"color_field_bin":null,"color_field_scale_scheme":null,"color_field_type":null,"data_variable":"maximum_data","geodata_color":"blue","latitude_field":null,"longitude_field":null,"x_field":"milliseconds","x_field_aggregate":null,"x_field_bin":null,"x_field_scale_type":null,"x_field_type":"quantitative","y_field":"name","y_field_aggregate":null,"y_field_bin":null,"y_field_scale_type":null,"y_field_type":"nominal"},{"active":true,"chart_type":"bar","color_field":"name","color_field_aggregate":null,"color_field_bin":null,"color_field_scale_scheme":null,"color_field_type":"nominal","data_variable":"minimum_data","geodata_color":"blue","latitude_field":null,"longitude_field":null,"x_field":"milliseconds","x_field_aggregate":null,"x_field_bin":null,"x_field_scale_type":null,"x_field_type":"quantitative","y_field":"name","y_field_aggregate":null,"y_field_bin":null,"y_field_scale_type":null,"y_field_type":"nominal"},{"active":true,"chart_type":"rule","color_field":null,"color_field_aggregate":null,"color_field_bin":null,"color_field_scale_scheme":null,"color_field_type":null,"data_variable":"median_data","geodata_color":"blue","latitude_field":null,"longitude_field":null,"x_field":"milliseconds","x_field_aggregate":null,"x_field_bin":null,"x_field_scale_type":null,"x_field_type":"quantitative","y_field":"name","y_field_aggregate":null,"y_field_bin":null,"y_field_scale_type":null,"y_field_type":"nominal"}],"vl_alias":"Elixir.VegaLite","width":null},"chunks":null,"kind":"Elixir.KinoVegaLite.ChartCell","livebook_object":"smart_cell"} -->
+
+```elixir
+VegaLite.new(title: "Times")
+|> VegaLite.layers([
+  VegaLite.new()
+  |> VegaLite.data_from_values(maximum_data, only: ["milliseconds", "name"])
+  |> VegaLite.mark(:bar)
+  |> VegaLite.encode_field(:x, "milliseconds", type: :quantitative)
+  |> VegaLite.encode_field(:y, "name", type: :nominal),
+  VegaLite.new()
+  |> VegaLite.data_from_values(minimum_data, only: ["milliseconds", "name"])
+  |> VegaLite.mark(:bar)
+  |> VegaLite.encode_field(:x, "milliseconds", type: :quantitative)
+  |> VegaLite.encode_field(:y, "name", type: :nominal)
+  |> VegaLite.encode_field(:color, "name", type: :nominal),
+  VegaLite.new()
+  |> VegaLite.data_from_values(median_data, only: ["milliseconds", "name"])
+  |> VegaLite.mark(:rule)
+  |> VegaLite.encode_field(:x, "milliseconds", type: :quantitative)
+  |> VegaLite.encode_field(:y, "name", type: :nominal)
+])
+```
+
+<!-- livebook:{"attrs":{"chart_title":"Times Smaller than 500ms","height":null,"layers":[{"active":true,"chart_type":"bar","color_field":null,"color_field_aggregate":null,"color_field_bin":null,"color_field_scale_scheme":null,"color_field_type":null,"data_variable":"max_data","geodata_color":"blue","latitude_field":null,"longitude_field":null,"x_field":"milliseconds","x_field_aggregate":null,"x_field_bin":null,"x_field_scale_type":null,"x_field_type":"quantitative","y_field":"name","y_field_aggregate":null,"y_field_bin":null,"y_field_scale_type":null,"y_field_type":"nominal"},{"active":true,"chart_type":"bar","color_field":"name","color_field_aggregate":null,"color_field_bin":null,"color_field_scale_scheme":null,"color_field_type":"nominal","data_variable":"min_data","geodata_color":"blue","latitude_field":null,"longitude_field":null,"x_field":"milliseconds","x_field_aggregate":null,"x_field_bin":null,"x_field_scale_type":null,"x_field_type":"quantitative","y_field":"name","y_field_aggregate":null,"y_field_bin":null,"y_field_scale_type":null,"y_field_type":"nominal"},{"active":true,"chart_type":"rule","color_field":null,"color_field_aggregate":null,"color_field_bin":null,"color_field_scale_scheme":null,"color_field_type":null,"data_variable":"median_2_data","geodata_color":"blue","latitude_field":null,"longitude_field":null,"x_field":"milliseconds","x_field_aggregate":null,"x_field_bin":null,"x_field_scale_type":null,"x_field_type":"quantitative","y_field":"name","y_field_aggregate":null,"y_field_bin":null,"y_field_scale_type":null,"y_field_type":"nominal"}],"vl_alias":"Elixir.VegaLite","width":null},"chunks":null,"kind":"Elixir.KinoVegaLite.ChartCell","livebook_object":"smart_cell"} -->
+
+```elixir
+VegaLite.new(title: "Times Smaller than 500ms")
+|> VegaLite.layers([
+  VegaLite.new()
+  |> VegaLite.data_from_values(max_data, only: ["milliseconds", "name"])
+  |> VegaLite.mark(:bar)
+  |> VegaLite.encode_field(:x, "milliseconds", type: :quantitative)
+  |> VegaLite.encode_field(:y, "name", type: :nominal),
+  VegaLite.new()
+  |> VegaLite.data_from_values(min_data, only: ["milliseconds", "name"])
+  |> VegaLite.mark(:bar)
+  |> VegaLite.encode_field(:x, "milliseconds", type: :quantitative)
+  |> VegaLite.encode_field(:y, "name", type: :nominal)
+  |> VegaLite.encode_field(:color, "name", type: :nominal),
+  VegaLite.new()
+  |> VegaLite.data_from_values(median_2_data, only: ["milliseconds", "name"])
+  |> VegaLite.mark(:rule)
+  |> VegaLite.encode_field(:x, "milliseconds", type: :quantitative)
+  |> VegaLite.encode_field(:y, "name", type: :nominal)
+])
+```
+
+<!-- livebook:{"attrs":{"chart_title":"Iterations Per Second","height":null,"layers":[{"active":true,"chart_type":"rule","color_field":null,"color_field_aggregate":null,"color_field_bin":null,"color_field_scale_scheme":null,"color_field_type":null,"data_variable":"ips_data","geodata_color":"blue","latitude_field":null,"longitude_field":null,"x_field":"ips","x_field_aggregate":null,"x_field_bin":null,"x_field_scale_type":null,"x_field_type":"quantitative","y_field":"name","y_field_aggregate":null,"y_field_bin":null,"y_field_scale_type":null,"y_field_type":"nominal"}],"vl_alias":"Elixir.VegaLite","width":null},"chunks":null,"kind":"Elixir.KinoVegaLite.ChartCell","livebook_object":"smart_cell"} -->
+
+```elixir
+VegaLite.new(title: "Iterations Per Second")
+|> VegaLite.data_from_values(ips_data, only: ["ips", "name"])
+|> VegaLite.mark(:rule)
+|> VegaLite.encode_field(:x, "ips", type: :quantitative)
+|> VegaLite.encode_field(:y, "name", type: :nominal)
 ```

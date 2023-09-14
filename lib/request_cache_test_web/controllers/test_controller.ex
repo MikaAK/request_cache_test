@@ -45,49 +45,91 @@ defmodule RequestCacheTestWeb.TestController do
 
   def test_100b(conn, _) do
     conn
-      # |> RequestCache.store(:timer.minutes(60))
+      |> RequestCache.store(:timer.minutes(60))
       |> put_status(:ok)
       |> json(@item_100_bytes)
   end
 
   def test_10kb(conn, _) do
     conn
-      # |> RequestCache.store(:timer.minutes(60))
+      |> RequestCache.store(:timer.minutes(60))
       |> put_status(:ok)
       |> json(@item_10_kb)
   end
 
   def test_100kb(conn, _) do
     conn
-      # |> RequestCache.store(:timer.minutes(60))
+      |> RequestCache.store(:timer.minutes(60))
       |> put_status(:ok)
       |> json(@item_100_kb)
   end
 
   def test_10mb(conn, _) do
     conn
-      # |> RequestCache.store(:timer.minutes(60))
+      |> RequestCache.store(:timer.minutes(60))
       |> put_status(:ok)
       |> json(@item_10_mb)
   end
 
   def test_100mb(conn, _) do
     conn
-      # |> RequestCache.store(:timer.minutes(60))
+      |> RequestCache.store(:timer.minutes(60))
       |> put_status(:ok)
       |> json(@item_plus_100_mb)
   end
 
   def test_large(conn, _) do
     conn
-      # |> RequestCache.store(:timer.minutes(60))
+      |> RequestCache.store(:timer.minutes(60))
       |> put_status(:ok)
       |> json(@large_item)
   end
 
   def test_larges(conn, _) do
     conn
-      # |> RequestCache.store(:timer.minutes(60))
+      |> RequestCache.store(:timer.minutes(60))
+      |> put_status(:ok)
+      |> json(@large_items)
+  end
+
+  def test_uncached_100b(conn, _) do
+    conn
+      |> put_status(:ok)
+      |> json(@item_100_bytes)
+  end
+
+  def test_uncached_10kb(conn, _) do
+    conn
+      |> put_status(:ok)
+      |> json(@item_10_kb)
+  end
+
+  def test_uncached_100kb(conn, _) do
+    conn
+      |> put_status(:ok)
+      |> json(@item_100_kb)
+  end
+
+  def test_uncached_10mb(conn, _) do
+    conn
+      |> put_status(:ok)
+      |> json(@item_10_mb)
+  end
+
+  def test_uncached_100mb(conn, _) do
+    conn
+      |> put_status(:ok)
+      |> json(@item_plus_100_mb)
+  end
+
+  def test_uncached_large(conn, _) do
+    conn
+      |> put_status(:ok)
+      |> json(@large_item)
+  end
+
+  def test_uncached_larges(conn, _) do
+    conn
       |> put_status(:ok)
       |> json(@large_items)
   end
